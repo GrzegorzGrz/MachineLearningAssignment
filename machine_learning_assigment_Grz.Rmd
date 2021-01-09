@@ -1,0 +1,76 @@
+---
+title: "Machine Learning assignment"
+author: "Gr"
+date: "1/9/2021"
+output: html_document
+---
+
+Using devices such as Jawbone Up, Nike FuelBand, and Fitbit it is now possible to collect a large amount of data about personal activity relatively inexpensively. These type of devices are part of the quantified self movement – a group of enthusiasts who take measurements about themselves regularly to improve their health, to find patterns in their behavior, or because they are tech geeks. One thing that people regularly do is quantify how much of a particular activity they do, but they rarely quantify how well they do it. In this project, your goal will be to use data from accelerometers on the belt, forearm, arm, and dumbell of 6 participants. They were asked to perform barbell lifts correctly and incorrectly in 5 different ways. More information is available from the website here: http://groupware.les.inf.puc-rio.br/har (see the section on the Weight Lifting Exercise Dataset). 
+
+### The goal of your project is to predict the manner in which they did the exercise. 
+
+
+## Reading Data and initial exploration 
+
+```{r}
+library(caret)
+set.seed(12463)
+raw_input_data <- read.csv("pml-training.csv")
+```
+```{r eval=FALSE}
+head(raw_input_data)
+unique(raw_input_data$classe)
+str(raw_input_data)
+```
+```{r}
+sum(is.na(raw_input_data))
+sum(!is.na(raw_input_data))
+```
+
+Data contains 5 levels of classe variable which is expected based on data description. There is a lot of missing data, at first I will take strategy to remove columns with missing data. If final result will not be satisfactory this approach might be modified. Near zero variable also will be removed and columns which doesn`t seem to be relevant for model building.
+
+
+## Basic transformation
+```{R}
+input_data <- raw_input_data
+input_data$classe <- as.factor(input_data$classe)
+input_data <- input_data[,-nearZeroVar(input_data)]
+input_data <- input_data[,-c(1,2,3,4,5,6,7)]
+input_data <- input_data[, colSums(is.na(input_data)) == 0]
+```
+
+## Spliting data into Training and Testing data set - cross validation
+
+```{r}
+inTrain <- createDataPartition(y=input_data$classe, p=0.75, list=FALSE)
+training <- input_data[inTrain,]
+testing <- input_data[-inTrain,]
+```
+We use knn method to train model and pre process data by centering, scaling and applying PCA
+
+```{r}
+trained_model_KNN <- train(classe ~.,data=training, method="knn", preProcess = c("center", "scale", "pca"))
+confMatKNN <- confusionMatrix(predict(trained_model_KNN, testing),testing$classe)
+confMatKNN$overall[1:4]
+confMatKNN$byClass[ ,1:2]
+results <- as.data.frame(confMatKNN$table)
+ggplot() + geom_point(data = results, aes(x = Prediction,y = Reference, size = Freq)) + scale_size(breaks = c(20,50,100,200,500,700,1000), range = c(0, 30)) 
+
+```
+
+  Overall model statistics are satisfactory, with accuracy above 95%, we will use the model on a final test data.
+
+# Prediction on test data
+
+```{r}
+final_test_raw <- read.csv("pml-testing.csv")
+final_test <- final_test_raw
+final_test <- final_test[,names(final_test) %in% names(training)]
+predicted_results <- predict(trained_model_KNN, final_test)
+```
+Predicted results for each person:
+
+```{r}
+cbind.data.frame(final_test_raw$user_name, predicted_results )
+```
+
